@@ -1,0 +1,53 @@
+# OMX LEADER (OMX-L) profile — for the M1 to_sim demo.
+#
+# The leader is torque-OFF / back-drivable, so you can HAND-DRAG it and watch the
+# Isaac twin follow — a pure read-only real->sim demo (nothing is ever written to
+# the real arm). The sim endpoint drives the SAME omx_f USD in Isaac (leader and
+# follower share joint names / kinematics), so one USD twins either arm.
+
+robot: omx_l
+canonical_unit: rad
+
+joints:
+  - joint1
+  - joint2
+  - joint3
+  - joint4
+  - joint5
+  - gripper_joint_1
+
+endpoints:
+  real:                                       # the real leader, via omx_arm_image ros2_control
+    kind: ros2_control
+    unit: deg
+    state_topic: /leader/joint_states         # <- to_sim reads THIS (JointState, deg)
+    # command_topic is UNUSED in to_sim (we never write to the leader); placeholder
+    # only, to satisfy the schema. The leader has no arm_controller anyway.
+    command_topic: /leader/arm_controller/commands
+    command_type: std_msgs/Float64MultiArray
+    per_joint: {}
+
+  sim:                                        # Isaac Sim (omx_f USD), via ros2_bridge
+    kind: ros2_jointstate
+    unit: rad
+    state_topic: /joint_states
+    command_topic: /joint_command             # <- to_sim writes THIS (drives the twin)
+    command_type: sensor_msgs/JointState
+    asset: assets/omx_f.usd
+    joint_alias: {}
+    # Calibration (2026-07-23): the DYNAMIXEL driver reports each joint centered on
+    # ~180 deg (2048-tick center), but the URDF/USD zero is 0 deg -> every joint is
+    # 180 deg (pi rad) off. Only gripper_joint_1 also runs opposite to the USD.
+    # sign flips direction; offset (RADIANS) shifts the zero so real ~180 deg -> sim 0:
+    #   non-reversed: sim = +canonical - pi
+    #   reversed:     sim = -canonical + pi
+    per_joint:
+      joint1:          { sign:  1.0, offset: -3.14159265 }
+      joint2:          { sign:  1.0, offset: -3.14159265 }
+      joint3:          { sign:  1.0, offset: -3.14159265 }
+      joint4:          { sign:  1.0, offset: -3.14159265 }
+      joint5:          { sign:  1.0, offset: -3.14159265 }
+      gripper_joint_1: { sign: -1.0, offset:  3.14159265 }
+
+base:
+  type: fixed

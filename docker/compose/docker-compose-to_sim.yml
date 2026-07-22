@@ -1,0 +1,35 @@
+# to_sim: real arm -> Isaac twin (read-only on the real arm).
+#
+# Runs ONLY the bridge. Bring up the real arm separately with your existing
+# omx_arm_image tooling (that keeps real-hardware bring-up in your trusted tools).
+# The bridge subscribes the real arm's joint_states and republishes /joint_command
+# to Isaac -- it never writes to the real arm, so this is safe to run live.
+name: omx_sim2real
+
+services:
+  bridge:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_bridge
+    network_mode: host
+    ipc: host
+    environment:
+      # Same recipe proven by the cross-distro smoke test; must match the real arm
+      # and Isaac (both on this ROS_DOMAIN_ID, both reachable over UDPv4).
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    # entrypoint (/ros_entrypoint.bash) sources ROS + the workspace overlay, then
+    # execs this -- so `ros2 run` sees the sim_real_bridge package.
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/${PROFILE:-omx_l}.profile.yaml
+      - -p
+      - mode:=to_sim
+    stdin_open: true
+    tty: true
