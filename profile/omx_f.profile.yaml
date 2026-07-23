@@ -7,6 +7,7 @@
 #   follower from the sim. That path moves real hardware (fake-driver verify first).
 
 robot: omx_f
+label: follower        # shown as the column name in dual_state_monitor
 canonical_unit: rad
 
 joints:

@@ -1,0 +1,32 @@
+# fanout: /sync/command -> BOTH sim + real, synchronized (*** MOVES THE REAL ARM ***).
+#
+# Publish one JointState (sim/USD convention, radians, canonical joint names, may be
+# partial) to /sync/command and both the sim (/joint_command) and the real follower
+# (/follower/arm_controller/commands) get the same target at once. On start the bridge
+# SEEDS its target from the real arm's current pose (sim aligns to real, real holds),
+# so there is no jump -- then your /sync/command nudges move both together.
+name: omx_sim2real
+
+services:
+  bridge:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_bridge   # same name as to_sim/to_real -> one at a time
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/omx_f.profile.yaml
+      - -p
+      - mode:=fanout
+    stdin_open: true
+    tty: true

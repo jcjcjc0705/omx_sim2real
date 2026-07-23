@@ -1,0 +1,58 @@
+# lead-chain (A, via sim): hand-drag the LEADER -> sim -> real FOLLOWER
+# (*** MOVES THE REAL FOLLOWER ***).
+#
+# TWO bridges chained through Isaac (distinct container names so they coexist):
+#   leadsim  = to_sim(omx_l):  /leader/joint_states -> /joint_command  -> Isaac moves the sim
+#   leadreal = to_real(omx_f): Isaac /joint_states  -> /follower/...    -> real follower
+# So leader -> sim -> follower. The follower tracks the sim's ACHIEVED (collision-
+# filtered) pose, so the sim acts as a safety filter -- at the cost of latency
+# (the follower lags while the sim settles). Needs Isaac in the loop (publishing
+# /joint_states via the Publish Joint State node).
+name: omx_sim2real
+
+services:
+  leadsim:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_leadsim
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/omx_l.profile.yaml
+      - -p
+      - mode:=to_sim
+    stdin_open: true
+    tty: true
+
+  leadreal:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_leadreal
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/omx_f.profile.yaml
+      - -p
+      - mode:=to_real
+    stdin_open: true
+    tty: true

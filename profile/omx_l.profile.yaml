@@ -6,6 +6,7 @@
 # follower share joint names / kinematics), so one USD twins either arm.
 
 robot: omx_l
+label: leader          # shown as the column name in dual_state_monitor
 canonical_unit: rad
 
 joints:

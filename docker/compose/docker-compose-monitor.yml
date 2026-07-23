@@ -1,0 +1,31 @@
+# dual_state_monitor: read-only live sim<->real divergence TUI.
+#
+# Subscribes both endpoints' joint states, converts to the canonical space, and shows a
+# per-joint real-vs-sim comparison (curses TUI; degrees). Read-only -- never commands
+# anything -- so it is safe to run ALONGSIDE any mode. Launched via `run.sh monitor`
+# with `docker compose run` so curses gets an interactive TTY. Needs Isaac to be
+# publishing /joint_states (the Publish Joint State node) to have a sim side to compare.
+name: omx_sim2real
+
+services:
+  monitor:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - dual_state_monitor
+      - --ros-args
+      - -p
+      # leader + follower columns (each converted to the sim/USD frame) + a sim column.
+      # An arm that isn't running just shows "--"; no error.
+      - profiles:=/profile/omx_l.profile.yaml,/profile/omx_f.profile.yaml
+    stdin_open: true
+    tty: true

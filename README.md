@@ -8,65 +8,72 @@ OMX 的 **sim-to-real-to-sim** 機器人資料層,跑在
 ```
 omx_sim2real/
 ├── profile/
-│   ├── omx_l.profile.yaml       # 遙操作端(leader):徒手拖、唯讀 → M1 demo 用這個
-│   └── omx_f.profile.yaml       # 跟隨端(follower):框架真正目標
+│   ├── omx_l.profile.yaml   # leader(遙操作端,徒手拖)
+│   └── omx_f.profile.yaml   # follower(框架目標)
 ├── assets/
-│   ├── omx_f/                   # 從 omx_bringup 匯出的 URDF + meshes(給 Isaac Import)
-│   └── omx_f.usd                # 在 Isaac 匯入 + 調好 drive 後 Save 出來的
+│   ├── omx_f/               # 從 omx_bringup 匯出的 URDF + meshes(給 Isaac Import)
+│   └── omx_f.usd            # Isaac 匯入 + 調好 drive + Action Graph 後 Save 出來的
 └── docker/
-    ├── compose/{.env, docker-compose-to_sim.yml}
+    ├── compose/.env
+    ├── compose/docker-compose-{to_sim,to_real,fanout,lead,lead-chain,monitor}.yml
     └── run.sh
 ```
 
-## 契約回顧
+## 契約 / 校正
 
-bridge 只認 canonical 關節空間(`JointState`、radians、以關節名為 key),兩端的
-單位/topic/sign/offset 全由 `profile/*.profile.yaml` 決定。模式:
+bridge 只認 canonical 關節空間(`JointState`、radians、以關節名為 key)。
+**canonical = 真臂 driver 慣例(弧度)**,所以 real 端是純 deg↔rad(恆等),所有
+「USD 零位/軸向對不上」的校正(sign/offset)放 `sim.per_joint`。OMX 實測校正:
 
-| 模式 | 方向 | 動真臂? |
-|---|---|---|
-| **to_sim**(M1) | 真臂 → Isaac 分身 | 否(唯讀,安全) |
-| to_real(M2) | Isaac → 真臂 | 是(先 fake driver 驗) |
-| fanout(M3) | 單一命令 → 兩邊同步 | 是 |
+- DYNAMIXEL 位置模式**中心在 180°** → 每軸 `offset = -π`
+- follower 六軸都 `sign +1`
+- leader gripper `sign -1`(跟 follower 夾爪鏡像;follower gripper 是 `+1`)
 
-## M1 demo:徒手拖 leader,看 Isaac 分身跟著動(唯讀)
+## 模式(`run.sh <mode>`)
 
-**三個終端機**(真臂/bridge 走系統 ROS,都 `ROS_DOMAIN_ID=1`;Isaac 見下):
+| 指令 | 方向 | 需要的真臂 | 動真臂? |
+|---|---|---|---|
+| `run.sh`(= to_sim) | 真臂 → Isaac 分身 | leader(見 .env PROFILE) | 否(唯讀) |
+| `run.sh to_real` | Isaac → 真 follower | follower | **是** |
+| `run.sh fanout` | `/sync/command` → sim+real 同步 | follower | **是** |
+| `run.sh lead` | 徒手拖 leader → sim + follower(**直接**,低延遲) | leader + follower | **是** |
+| `run.sh lead-chain` | leader → sim → follower(經 Isaac,sim 當碰撞過濾) | leader + follower | **是** |
+| `run.sh monitor` | leader/follower/sim **三欄偏差 TUI**(唯讀,可與任何模式併跑) | — | 否 |
+| `run.sh down` | 停掉全部 | — | — |
 
-**① 真臂(leader,torque-off 可徒手拖)** — 用你既有的 omx_arm_image 工具:
+## 前置(每次)
+
+1. **真臂**:用 `omx_arm_image` 的 `scripts/run.sh leader` / `run.sh follower`
+   (看模式需要哪隻;lead* 需要**兩隻**)。
+2. **Isaac**:`~/Desktop/isaac_sim_5.1/start_isaac_ros.sh` 啟動(帶 `ROS_DOMAIN_ID=1`
+   + `FASTDDS_BUILTIN_TRANSPORTS=UDPv4`)→ 載 `assets/omx_f.usd` → Action Graph
+   (`Subscribe /joint_command` + `Publish /joint_states`,`targetPrim = root_joint`)→ ▶ Play。
+3. 每個終端機都要 `ROS_DOMAIN_ID=1` + `FASTDDS_BUILTIN_TRANSPORTS=UDPv4`
+   (建議寫進 `~/.bashrc`)。
+
+## 最完整的 demo:leader 同時控制 sim + follower
+
 ```bash
-cd .../docker/omx_arm_image
-bash scripts/run.sh leader           # 帶起 leader,發布 /leader/joint_states
+(omx_arm_image) bash scripts/run.sh leader     # 來源(torque off,可拖)
+(omx_arm_image) bash scripts/run.sh follower   # 目標(torque on)
+                bash run.sh lead               # bridge:leader → sim + follower
+                bash run.sh monitor            # 另開:三欄看 leader≈follower≈sim
 ```
+徒手拖 leader → Isaac 分身 + 真 follower 一起動。monitor 的 `spread` / 兩兩偏差
+超過 5° 的那格會標紅。
 
-**② Isaac Sim**:用帶環境變數的終端機啟動(`source humble` + `ROS_DOMAIN_ID=1`
-+ `FASTDDS_BUILTIN_TRANSPORTS=UDPv4`),載入 `assets/omx_f.usd`,▶ Play。
+## 安全
 
-**③ bridge(to_sim)** — 本專案:
-```bash
-cd omx_sim2real/docker
-bash run.sh                          # 預設 PROFILE=omx_l(見 compose/.env)
-```
+- **to_sim / monitor**:唯讀,安全。
+- **to_real / fanout / lead / lead-chain**:會動真 follower → **先讓 sim≈real 起步、
+  手放 Ctrl+C、小步試**。
+- ⚠️ 這份 URDF 限位是全開的 ±360°,**擋不住真臂**;耦合的自我碰撞安全夾限**尚未做**(TODO)。
 
-然後**用手拖動真的 leader 手臂** → Isaac 裡的 omx_f 分身即時跟著動。全程 bridge
-只讀 `/leader/joint_states`、寫 `/joint_command`,**不會對真臂下任何命令**。
+## 動不了 / 連不到?
 
-### 快速自我檢查
-
-```bash
-ros2 topic echo /joint_command --once     # 有沒有在發(度數已轉成弧度)
-ros2 topic hz  /leader/joint_states       # 真臂有沒有在發狀態
-```
-
-## 換成 follower(框架目標)
-
-把 `compose/.env` 的 `PROFILE=omx_l` 改成 `PROFILE=omx_f`,bridge 就改讀
-`/follower/joint_states`。但 follower torque-on 會自己 hold,要看到分身動得先讓
-follower 動(例如跑 leader→follower 遙操作)。真正「從 sim 驅動 follower」是
-**M2(to_real)**,那會動真臂,到時先用 fake driver 驗過再上。
-
-## 連不到?先試這兩個
-
-- **domain 不一致**:三邊(真臂、Isaac、bridge)都要 `ROS_DOMAIN_ID=1`。
-- **傳輸**:Isaac / bridge 已強制 `FASTDDS_BUILTIN_TRANSPORTS=UDPv4`;若 bridge
-  看不到真臂的 topic,替真臂那邊(omx_arm_image compose)也加上這個 env 再試。
+- 先 `docker ps` + `ros2 topic list`。若只有 `/joint_command`、`/joint_states`
+  (Isaac 的)而**沒有** `/leader/joint_states`、`/follower/joint_states` → **真臂沒 bring up**。
+- 三邊(真臂、Isaac、bridge)`ROS_DOMAIN_ID` 都要 `1`,都要 UDPv4。
+- 殘留 bridge 打架 → `bash run.sh down` 清掉(orphan 警告無害)。
+- 真臂完全不回應(有命令卻不動)→ 可能 DYNAMIXEL Hardware Error,進 follower container
+  `dxl_cli.py READ <id>` 看錯、`REBOOT <id>` 清。

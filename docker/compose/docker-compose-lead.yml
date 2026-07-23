@@ -1,0 +1,35 @@
+# lead (B, direct): hand-drag the LEADER -> BOTH sim + real FOLLOWER, in parallel
+# (*** MOVES THE REAL FOLLOWER ***).
+#
+# One bridge reads /leader/joint_states and, via the USD frame, drives the sim
+# (/joint_command) AND the follower (/follower/arm_controller/commands) at once --
+# lower latency than the chained version (the follower doesn't wait for the sim to
+# settle), but the follower does NOT get the sim's collision filtering.
+# The leader/follower gripper mirror falls out of composing omx_l.sim with omx_f.sim.
+name: omx_sim2real
+
+services:
+  bridge:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_bridge   # same as to_sim/to_real/fanout -> one at a time
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/omx_f.profile.yaml          # target = follower
+      - -p
+      - source_profile:=/profile/omx_l.profile.yaml   # source = leader
+      - -p
+      - mode:=lead
+    stdin_open: true
+    tty: true
