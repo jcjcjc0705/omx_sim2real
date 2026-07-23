@@ -34,7 +34,19 @@ endpoints:
     command_type: sensor_msgs/JointState
     asset: assets/omx_f.usd
     joint_alias: {}
-    per_joint: {}                                       # tune during M1 calibration (USD zero vs driver zero)
+    # Follower calibration (2026-07-23): same DYNAMIXEL ~180-deg center as the
+    # leader -> offset -pi on every joint. Unlike the leader, the follower gripper
+    # is the MIRROR-OPPOSITE of the leader's (teleop mirror uses signs [..,-1]),
+    # so it needs sign +1 (the opposite of the leader gripper's -1). Net result:
+    # all 6 follower joints are uniform (sign +1, offset -pi). Re-verify read-only
+    # (to_sim) before to_real; fine-tune a joint's offset if its neutral is off.
+    per_joint:
+      joint1:          { sign: 1.0, offset: -3.14159265 }
+      joint2:          { sign: 1.0, offset: -3.14159265 }
+      joint3:          { sign: 1.0, offset: -3.14159265 }
+      joint4:          { sign: 1.0, offset: -3.14159265 }
+      joint5:          { sign: 1.0, offset: -3.14159265 }
+      gripper_joint_1: { sign: 1.0, offset: -3.14159265 }
 
 base:
   type: fixed

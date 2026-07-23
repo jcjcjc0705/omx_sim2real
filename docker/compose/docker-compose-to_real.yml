@@ -1,0 +1,34 @@
+# to_real: Isaac sim -> real FOLLOWER (*** MOVES THE REAL ARM ***).
+#
+# The bridge subscribes Isaac's /joint_states and publishes
+# /follower/arm_controller/commands -- i.e. it drives the real follower.
+# Always the follower profile (omx_f). Before running:
+#   1. verify the follower calibration READ-ONLY first (to_sim, torque off, hand-drag),
+#   2. make the sim pose ~ the real follower pose (or it will sweep there at the
+#      controller's profile speed when you start),
+#   3. keep Ctrl+C ready.
+name: omx_sim2real
+
+services:
+  bridge:
+    image: registry.screamtrumpet.csie.ncku.edu.tw/pochun/sim_real_bridge_image:latest
+    container_name: omx_sim2real_bridge   # same name as to_sim -> can't run both at once (intended)
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+      - FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+    volumes:
+      - ../../profile:/profile:ro
+    command:
+      - ros2
+      - run
+      - sim_real_bridge
+      - sync_node
+      - --ros-args
+      - -p
+      - profile:=/profile/omx_f.profile.yaml   # to_real is always the follower
+      - -p
+      - mode:=to_real
+    stdin_open: true
+    tty: true
