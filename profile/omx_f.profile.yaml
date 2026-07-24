@@ -25,15 +25,6 @@ endpoints:
     state_topic: /follower/joint_states                 # sensor_msgs/JointState (by name)
     command_topic: /follower/arm_controller/commands    # std_msgs/Float64MultiArray (by joints[] order)
     command_type: std_msgs/Float64MultiArray
-    # Low-pass smoothing on the follower command (applied at the 50 Hz output). The
-    # follower tracks the raw command faithfully, so a hand-dragged leader's tremor
-    # plus the fast catch-up / hard-stop excite the flexible arm. tau smooths the
-    # approach (gentle deceleration, less structural excitation) and still converges
-    # to the exact target. Bigger tau = smoother + more lag (real-time isn't critical
-    # here). Bind-mounted profile -> tune tau and just restart the bridge, no rebuild.
-    smoothing:
-      time_constant: 0.15    # seconds; 0 = off
-      deadband_deg: 0.0      # skip a command if no joint moved this much (0 = off)
     per_joint: {}
 
   sim:                                                  # Isaac Sim (omx_f USD), via ros2_bridge
